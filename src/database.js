@@ -48,7 +48,9 @@ exports.load = (cb) => {
     // HashMap for SuiteScripts
     db.$scripts = {};
 
-    cb(global.$db = db);
+    global.$db = db;
+    if (cb) return cb(db);
+    else return db;
 };
 
 /**
@@ -62,7 +64,7 @@ exports.load = (cb) => {
  *    params: {}
  * }}
  */
-exports.createScript = (data) => {
+exports.createSuiteScript = (data) => {
     if (!data || !data.type) {
         throw new Error('Not found type of SuiteScript');
     }
@@ -75,13 +77,13 @@ exports.createScript = (data) => {
     let scripts = $db('__scripts');
     if (!data.id) data.id = (scripts.size() + 1);
 
-    data.uri = URI[data.type];
+    data.uri = URI[data.type]; // only suitelet and restlet
     if (data.uri) {
         data.url = `http://localhost:${srvconf.port}${data.uri}?script=${data.id}`;
     }
 
     // create script in other context
-    let context = vmSim.createScript({
+    let context = vmSim.importSuiteScript({
         name: data.name,
         files: data.files,
         params: data.params

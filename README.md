@@ -8,7 +8,7 @@ Netsuite API Mockup
 
 ## Install [![Dependency Status][david-image]][david-url] [![devDependency Status][david-image-dev]][david-url-dev]
 ```bash
-    npm install nsmockup
+    npm install nsmockup -save-dev
 ```
 
 ## Usage
@@ -129,6 +129,55 @@ Netsuite API Mockup
         if (japo.verifyFinishSchedule()) {
             console.log('Finished Schedule');
         }
+    });
+```
+
+#### nsmockup.createUserEvent(cfg, cb)
+ - cfg {
+    name: String,
+    funcs: {
+        beforeLoad: String,
+        beforeSubmit: String,
+        afterSubmit: String
+    },
+    files: [String],
+    params: Object,
+    record: String
+ }
+ - cb (ctx, exec) => {} -- **callback**
+```javascript
+    nsmockup.createUserEvent({
+        name: 'my_user-event',
+        funcs: {
+            beforeLoad: 'MyUserEvent.beforeLoad',
+            beforeSubmit: 'MyUserEvent.beforeSubmit',
+            afterSubmit: 'MyUserEvent.afterSubmit',
+        },
+        files: [
+            __dirname + '/lib/my-user-event.js'
+        ],
+        record: 'customer'
+    }, (ctx, exec) => {
+        // verify if function 'MyUserEvent' was loaded
+        if (!ctx.MyUserEvent) throw 'not found MySchedule'
+        var should = require('should')
+
+        let record = nlapiLoadRecord('customer', 219);
+        record.setFieldValue('name', 'Muito Legal');
+
+        nlapiSubmitRecord(record);
+
+        let context = ctx.nlapiGetContext();
+        should(context).be.ok();
+
+        let beforeLoadType = context.getSessionObject('before-load-type');
+        should(beforeLoadType).be.equal('view');
+
+        let beforeSubmitType = context.getSessionObject('before-submit-type');
+        should(beforeSubmitType).be.equal('edit');
+
+        let afterSubmitType = context.getSessionObject('after-submit-type');
+        should(afterSubmitType).be.equal('edit');
     });
 ```
 

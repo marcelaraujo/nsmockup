@@ -9,7 +9,9 @@ var fs = require('fs'),
         script.runInContext(ctx || $context);
     };
 
-var NS_IMPORTS = [];
+$context.$$THIS_CONTEXT = 'global';
+$context.$$THIS_RECORD = null;
+$context.$db = null;
 
 /**
  * Import NetSuite functions and add in global context.
@@ -17,21 +19,30 @@ var NS_IMPORTS = [];
  * @param path {string} file path of nsmockup implementation.
  * @return {void}
  */
-exports.import = (path) => {
-    let lib = require(path);
+exports.importNsApi = (path, ctx) => {
+    let context = ctx || $context,
+        lib = require(path);
     Object.keys(lib).forEach(nsFunc => {
-        // add import reference
-        !~NS_IMPORTS.indexOf(nsFunc) && NS_IMPORTS.push(nsFunc);
         // verify if this function was imported before
-        let desc = Object.getOwnPropertyDescriptor($context, nsFunc);
+        let desc = Object.getOwnPropertyDescriptor(context, nsFunc);
         if (desc) return;
 
-        Object.defineProperty($context, nsFunc, {
+        Object.defineProperty(context, nsFunc, {
             enumerable: false,
             configurable: false,
             value: lib[nsFunc]
         });
     });
+};
+
+exports.importAllNsApi = (ctx) => {
+    var glob = require('glob'),
+        files = glob.sync(__dirname + '/../lib/ns*/**/*.js');
+    for (let i = 0; i < files.length; i++) {
+        let file = path.resolve(files[i]);
+        exports.importNsApi(file, ctx);
+    }
+    exports.importNsApi(path.resolve(__dirname + '/../nsapi-def.js'), ctx);
 };
 
 /**
@@ -43,24 +54,37 @@ exports.import = (path) => {
 exports.loadScriptConfig = (scriptName) => {
     let $scripts = $context.$db.$scripts;
     if (!$scripts[scriptName]) {
-        let nsFuncDefaults = NS_IMPORTS.concat(['$db']),
-            context = {console, require, module, exports};
-        // create context from $context
-        for (let n=0; n<nsFuncDefaults.length; n++) {
-            let nsFunc = nsFuncDefaults[n];
-            context[nsFunc] = $context[nsFunc];
-        }
+        let context = vm.createContext({console, require, module, exports});
+        context.$db = $context.$db;
+        context.global = context;
+        context.$$THIS_CONTEXT = scriptName;
+
+        //let database = require('./database');
+        //database.load(db => context.$db = db);
+
+        // load Netsuite functions and objects
+        exports.importAllNsApi(context);
+
         // create Script Configuration in new context
         $scripts[scriptName] = {
-            context: vm.createContext(context),
+            context: context,
             files: []
         };
     }
     return $scripts[scriptName];
 };
 
-
-exports.createScript = (script) => {
+/**
+ * Import script code on speficic context in VM.
+ *
+ * @param script {{
+ *    name: String,
+ *    files: [String],
+ *    params: {}
+ * }}
+ * @returns {} his context.
+ */
+exports.importSuiteScript = (script) => {
     if (!script && !script.name) {
         throw new Error('invalid script ... I liked scripts with a name!!!');
     }
@@ -77,7 +101,6 @@ exports.createScript = (script) => {
             exports.addScript(file, context);
             cfg.files.push(file);
         }
-
     }
 
     // load params configurations
@@ -118,10 +141,8 @@ exports.createInvokeFunction = (ctx) => {
         }
         let code = `$$RESULT = ${name}(${codeArgs.join(',')})`;
 
-        console.log(code);
-
         // execute function
         exports.evalContext(code, ctx);
-        return ctx.$$RESULT
+        return ctx.$$RESULT;
     };
 };
